@@ -4,8 +4,6 @@ import ImmutablePropTypes from 'react-immutable-proptypes';
 import styled from '@emotion/styled';
 import { ClassNames } from '@emotion/core';
 import { debounce } from 'lodash';
-import { Value } from 'slate';
-import { Editor as Slate, setEventTransfer } from 'slate-react';
 import Plain from 'slate-plain-serializer';
 import isHotkey from 'is-hotkey';
 import { lengths, fonts } from 'netlify-cms-ui-default';
@@ -17,7 +15,7 @@ import Toolbar from './Toolbar';
 function rawEditorStyles({ minimal }) {
   return `
   position: relative;
-  overflow: hidden;
+  resize: auto;
   overflow-x: auto;
   min-height: ${minimal ? 'auto' : lengths.richTextEditorMinHeight};
   font-family: ${fonts.mono};
@@ -36,20 +34,20 @@ export default class RawEditor extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      value: Plain.deserialize(this.props.value || ''),
+      value: this.props.value || '',
     };
   }
 
   shouldComponentUpdate(nextProps, nextState) {
     return (
-      !this.state.value.equals(nextState.value) ||
-      nextProps.value !== Plain.serialize(nextState.value)
+      this.state.value !== nextState.value ||
+      nextProps.value !== nextState.value
     );
   }
 
   componentDidUpdate(prevProps) {
     if (prevProps.value !== this.props.value) {
-      this.setState({ value: Plain.deserialize(this.props.value) });
+      this.setState({ value: this.props.value });
     }
   }
 
@@ -60,44 +58,18 @@ export default class RawEditor extends React.Component {
     }
   }
 
-  handleCopy = (event, editor) => {
-    const { getAsset, resolveWidget } = this.props;
-    const markdown = Plain.serialize(Value.create({ document: editor.value.fragment }));
-    const html = markdownToHtml(markdown, { getAsset, resolveWidget });
-    setEventTransfer(event, 'text', markdown);
-    setEventTransfer(event, 'html', html);
-    event.preventDefault();
-  };
-
-  handleCut = (event, editor, next) => {
-    this.handleCopy(event, editor, next);
-    editor.delete();
-  };
-
-  handlePaste = (event, editor, next) => {
-    event.preventDefault();
-    const data = event.clipboardData;
-    if (isHotkey('shift', event)) {
-      return next();
+  handleChange = e => {
+    const val = e.target.value;
+    if (this.state.value !== val) {
+      this.handleDocumentChange(val);
     }
-
-    const value = Plain.deserialize(data.getData('text/plain'));
-    return editor.insertFragment(value.document);
-  };
-
-  handleChange = editor => {
-    if (!this.state.value.document.equals(editor.value.document)) {
-      this.handleDocumentChange(editor);
-    }
-    this.setState({ value: editor.value });
+    this.setState({ value: val });
   };
 
   /**
-   * When the document value changes, serialize from Slate's AST back to plain
-   * text (which is Markdown) and pass that up as the new value.
+   * When the document value changes, pass that up as the new value.
    */
-  handleDocumentChange = debounce(editor => {
-    const value = Plain.serialize(editor.value);
+  handleDocumentChange = debounce(value => {
     this.props.onChange(value);
   }, 150);
 
@@ -125,7 +97,8 @@ export default class RawEditor extends React.Component {
         </EditorControlBar>
         <ClassNames>
           {({ css, cx }) => (
-            <Slate
+            <textarea
+              ref={this.processRef}
               className={cx(
                 className,
                 css`
@@ -134,10 +107,6 @@ export default class RawEditor extends React.Component {
               )}
               value={this.state.value}
               onChange={this.handleChange}
-              onPaste={this.handlePaste}
-              onCut={this.handleCut}
-              onCopy={this.handleCopy}
-              ref={this.processRef}
             />
           )}
         </ClassNames>
